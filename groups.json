@@ -1,0 +1,69 @@
+{
+  "_comment": "ผังคอลัมน์ของ AMATANGD — อ่านจากชีท Amata-* ในไฟล์ Excel ตัวเดียวกับ PTTNGD",
+  "site": {
+    "brand": "AMATANGD",
+    "date_sheet": "Amata-FO",
+    "date_cell": "B1",
+    "data_start_row": 8
+  },
+  "_actual_offset_comment": "เดือนสุดท้ายที่ถือเป็นราคาจริง = เดือนของไฟล์ + offset | COGEN 0 เพราะ Sn ใช้ Wellhead เดือน N-1 ที่ประกาศแล้ว | FO/LPG -1 เพราะยังรอ FX เฉลี่ยของเดือนปัจจุบัน",
+  "actual_offset": {
+    "Amata-COGEN": 0,
+    "Amata-FO": -1,
+    "Amata-LPG": -1
+  },
+  "groups": [
+    {
+      "id": "cogen_m8",
+      "name": "Cogen ค่าท่อ (-8)",
+      "subtitle": "Gas Turbine",
+      "sheet": "Amata-COGEN",
+      "kind": "cogen",
+      "anchor": ["L", "(-8)"],
+      "cols": { "Cn": "O", "Sn": "P", "price": "Q" }
+    },
+    {
+      "id": "cogen_p3",
+      "name": "Cogen ค่าท่อ (+3)",
+      "subtitle": "Gas Engine",
+      "sheet": "Amata-COGEN",
+      "kind": "cogen",
+      "anchor": ["R", "(+3)"],
+      "cols": { "Cn": "U", "Sn": "V", "price": "W" }
+    },
+    {
+      "id": "amata_fo",
+      "name": "AMATA-FO",
+      "subtitle": "อ้างอิงน้ำมันเตา",
+      "sheet": "Amata-FO",
+      "kind": "block",
+      "cols": {
+        "Cn": "G",
+        "blocks": [
+          { "label": "Block 1", "Sn": "H", "price": "I" },
+          { "label": "Block 2", "Sn": "J", "price": "K" },
+          { "label": "Block 3", "Sn": "L", "price": "M" },
+          { "label": "Block 4", "Sn": "N", "price": "O" },
+          { "label": "Block 5", "Sn": "P", "price": "Q" }
+        ]
+      }
+    },
+    {
+      "id": "amata_lpg",
+      "name": "AMATA-LPG",
+      "subtitle": "อ้างอิง LPG",
+      "sheet": "Amata-LPG",
+      "kind": "block",
+      "cols": {
+        "Cn": "H",
+        "blocks": [
+          { "label": "Block 1", "Sn": "I", "price": "J" },
+          { "label": "Block 2", "Sn": "K", "price": "L" },
+          { "label": "Block 3", "Sn": "M", "price": "N" },
+          { "label": "Block 4", "Sn": "O", "price": "P" },
+          { "label": "Block 5", "Sn": "Q", "price": "R" }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "_comment": "ก๊อปเป็น profiles.json แล้วใส่รหัสจริง — profiles.json ห้ามขึ้น git",
+  "profiles": [
+    { "label": "NGD-FO",           "password": "ใส่รหัสยาว16ตัวขึ้นไป", "view": ["ngd_fo"] },
+    { "label": "Cogen ค่าท่อ (-8)", "password": "ใส่รหัสยาว16ตัวขึ้นไป", "view": ["cogen_m8"] },
+    { "label": "NGD-LPG",          "password": "ใส่รหัสยาว16ตัวขึ้นไป", "view": ["ngd_lpg"] },
+    { "label": "Cogen ค่าท่อ (+3)", "password": "ใส่รหัสยาว16ตัวขึ้นไป", "view": ["cogen_p3"] }
+  ]
+}
