@@ -28,7 +28,7 @@ echo
 if [ -f data.json ]; then
   echo "── 2. เทียบกับรอบก่อน ────────────────────────"
   python3 diff.py data.json data_new.json || true
-  OLD=$(python3 -c "import json;print(json.load(open('data.json'))['as_of'][:7])")
+  OLD=$(python3 -c "import json;print(json.load(open('data.json'))['as_of'][:10])")
   cp data.json "archive/data_${OLD}.json"
   echo; echo "(เก็บรอบก่อนไว้ที่ archive/data_${OLD}.json)"
 else
