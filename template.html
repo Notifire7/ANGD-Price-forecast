@@ -56,6 +56,11 @@ h1{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:31px;font-weight:6
   margin:0;letter-spacing:-.015em;line-height:1.1}
 .asof{text-align:right;font-size:12.5px;color:var(--muted)}
 .asof b{display:block;color:var(--ink);font-weight:600;font-size:14px}
+.asof .lbl{display:block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;margin-bottom:2px}
+.asofnote{margin:18px 0 0;padding:10px 14px;border-left:3px solid var(--firm);background:var(--card);
+  border-radius:var(--r);font-size:13.5px;color:var(--muted)}
+.asofnote b{color:var(--ink);font-weight:600}
 
 /* ---------- tabs ---------- */
 nav{background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto}
@@ -158,12 +163,13 @@ footer ul{margin:8px 0 0;padding-left:18px} footer li{margin:3px 0;overflow-wrap
       <div class="eyebrow" id="eyebrow"></div>
       <h1 id="title"></h1>
     </div>
-    <div class="asof"><b id="asof"></b><span id="unit"></span></div>
+    <div class="asof"><span class="lbl">Update as of</span><b id="asof"></b><span id="unit"></span></div>
   </div></header>
 
   <nav><div class="wrap row" id="tabs" role="tablist"></div></nav>
 
   <div class="wrap">
+    <div class="asofnote" id="asofnote"></div>
     <div class="stats" id="stats"></div>
 
     <div class="ctl">
@@ -185,6 +191,7 @@ footer ul{margin:8px 0 0;padding-left:18px} footer li{margin:3px 0;overflow-wrap
         <li>ราคาทั้งหมดเป็นหน่วย บาท/ล้านบีทียู (THB/MMBTU) ยังไม่รวมภาษีมูลค่าเพิ่ม</li>
         <li><b>ราคาจริง</b> คือเดือนที่ทราบค่าอ้างอิงครบแล้ว &nbsp;<b>ประมาณการ</b> คือเดือนที่ยังใช้สมมติฐานคาดการณ์ ตัวเลขอาจเปลี่ยนแปลงได้</li>
         <li>ข้อมูลนี้ใช้เพื่อการวางแผนเบื้องต้นเท่านั้น ราคาที่เรียกเก็บจริงเป็นไปตามที่ระบุในสัญญาซื้อขายก๊าซธรรมชาติ</li>
+        <li id="asofli"></li>
         <li id="src"></li>
       </ul>
     </footer>
@@ -254,7 +261,10 @@ function start(data){
     + (D.profile ? " · " + D.profile : "");
   $("title").textContent = "แนวโน้มราคาก๊าซ " + D.year;
   const d = new Date(D.as_of);
-  $("asof").textContent = "ข้อมูล ณ " + d.getDate() + " " + MON[d.getMonth()] + " " + (d.getFullYear()+543);
+  const asofTxt = d.getDate() + " " + MON[d.getMonth()] + " " + (d.getFullYear()+543);
+  $("asof").textContent = asofTxt;
+  $("asofnote").innerHTML = "อัปเดตข้อมูล ณ วันที่ <b>" + asofTxt + "</b> — ราคาช่วงประมาณการคำนวณจากสมมติฐาน ณ วันดังกล่าว";
+  $("asofli").innerHTML = "ตัวเลขประมาณการใช้สมมติฐาน ณ วันที่ <b>" + asofTxt + "</b> หากสมมติฐานเปลี่ยน ราคาจะปรับตามรอบอัปเดตถัดไป";
   $("unit").textContent = D.unit;
   $("src").textContent = "ที่มา: " + D.source_file;
 

@@ -15,9 +15,11 @@ for a in "$@"; do
 done
 
 if [ -z "$XLSX" ]; then
-  XLSX=$(ls -t input/*.xlsx 2>/dev/null | head -1 || true)
+  # วางไฟล์ Excel ที่ input/ ของโฟลเดอร์ไหนก็ได้ (NGD หรือ ANGD) — หยิบไฟล์ใหม่สุดจากทั้งสองฝั่ง
+  # (ไฟล์ต้นฉบับเดียวกัน แต่ละฝั่งอ่านคนละชีทอยู่แล้ว)
+  XLSX=$(ls -t input/*.xlsx "../NGD Forecast/input/"*.xlsx "../ANGD Forecast/input/"*.xlsx 2>/dev/null | head -1 || true)
   [ -n "$XLSX" ] || { echo "[!] ไม่เจอ .xlsx ใน input/ — เอาไฟล์จาก Marketing มาวางก่อน"; exit 1; }
-  echo "ใช้ไฟล์ล่าสุดใน input/: $(basename "$XLSX")"; echo
+  echo "ใช้ไฟล์ล่าสุด: $XLSX"; echo
 fi
 
 echo "── 1. ดึงข้อมูล ──────────────────────────────"
