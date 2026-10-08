@@ -7,6 +7,9 @@
 
 ปีและเส้นแบ่ง actual/forecast คำนวณเองจากวันที่ในไฟล์ (cell B1)
 ไม่ต้องมาแก้โค้ดทุกเดือน
+
+ช่วงที่ดึง: ตั้งแต่ ม.ค. ของปีในไฟล์ ยาวไปจนถึง ธ.ค. ของปีสุดท้ายที่มีครบ 12 เดือน
+(เช่นไฟล์ Base.2027 -> ม.ค. 2026 ถึง ธ.ค. 2027) กำหนดเองได้ด้วย --end-year
 """
 import argparse, json, os, datetime as dt, sys
 from openpyxl import load_workbook
@@ -79,10 +82,24 @@ def num(ws, row, col):
         return None
 
 
-def cutoff(as_of, year, offset):
-    """เดือนสุดท้ายของ 'year' ที่ถือเป็นราคาจริง (0 = ยังไม่มีเลย, 12 = จริงทั้งปี)"""
-    n = (as_of.year - year) * 12 + as_of.month + offset
-    return max(0, min(12, n))
+def ym(y, m):
+    """แปลง (ปี, เดือน) เป็นเลขเดือนต่อเนื่อง เอาไว้เทียบก่อน/หลัง"""
+    return y * 12 + (m - 1)
+
+
+def cutoff(as_of, offset):
+    """เลขเดือนต่อเนื่อง (ym) ของเดือนสุดท้ายที่ถือเป็นราคาจริง"""
+    return ym(as_of.year, as_of.month) + offset
+
+
+def full_years(ws, start_row):
+    """ปีที่มีครบ 12 เดือนในชีทนี้"""
+    seen = {}
+    for r in range(start_row, ws.max_row + 1):
+        v = ws.cell(r, 1).value
+        if isinstance(v, dt.datetime):
+            seen.setdefault(v.year, set()).add(v.month)
+    return {y for y, ms in seen.items() if len(ms) == 12}
 
 
 def main():
@@ -90,6 +107,8 @@ def main():
     ap.add_argument("xlsx")
     ap.add_argument("--year", type=int, default=None,
                     help="ค่าเริ่มต้น = ปีของวันที่ในไฟล์")
+    ap.add_argument("--end-year", type=int, default=None,
+                    help="ปีสุดท้ายที่ดึง (ค่าเริ่มต้น = ปีสุดท้ายที่มีครบ 12 เดือนในไฟล์)")
     ap.add_argument("--out", default="data.json")
     ap.add_argument("--actual-through", metavar="YYYY-MM",
                     help="บังคับเส้นแบ่งราคาจริงเองทุก sheet (ปกติไม่ต้องใช้)")
@@ -120,12 +139,20 @@ def main():
     as_of = raw
     year = args.year or as_of.year
 
+    end_year = args.end_year
+    if end_year is None:
+        fy = full_years(wb[date_sheet], start_row)
+        end_year = year
+        while end_year + 1 in fy:
+            end_year += 1
+    years = list(range(year, end_year + 1))
+
     override = None
     if args.actual_through:
         y, m = (int(x) for x in args.actual_through.split("-"))
-        override = cutoff(dt.datetime(y, m, 1), year, 0)
+        override = ym(y, m)
 
-    out = {"year": year, "as_of": as_of.strftime("%Y-%m-%d"),
+    out = {"year": year, "end_year": end_year, "as_of": as_of.strftime("%Y-%m-%d"),
            "source_file": args.xlsx.split("/")[-1], "unit": "THB/MMBTU", "groups": []}
 
     problems, warnings = [], []
@@ -138,23 +165,30 @@ def main():
         if not args.no_check:
             check_headers(ws, g, problems)
 
-        rows = find_month_rows(ws, year, start_row)
-        miss = [m for m in range(1, 13) if m not in rows]
-        if miss:
-            problems.append(f"{g['sheet']}: ไม่มีข้อมูลเดือน "
-                            f"{', '.join(MON[m-1] for m in miss)} ของปี {year}")
+        rows, bad = {}, False
+        for y in years:
+            ry = find_month_rows(ws, y, start_row)
+            miss = [m for m in range(1, 13) if m not in ry]
+            if miss:
+                problems.append(f"{g['sheet']}: ไม่มีข้อมูลเดือน "
+                                f"{', '.join(MON[m-1] for m in miss)} ของปี {y}")
+                bad = True
+            rows.update({(y, m): r for m, r in ry.items()})
+        if bad:
             continue
 
         cut = override if override is not None else \
-            cutoff(as_of, year, ACTUAL_OFFSET.get(g["sheet"], -1))
+            cutoff(as_of, ACTUAL_OFFSET.get(g["sheet"], -1))
 
         rec = {k: g[k] for k in ("id", "name", "subtitle", "sheet", "kind")}
-        rec["actual_through"] = f"{year}-{cut:02d}" if cut else None
+        rec["actual_through"] = (f"{cut // 12}-{cut % 12 + 1:02d}"
+                                 if cut >= ym(year, 1) else None)
         rec["months"] = []
 
-        for m in range(1, 13):
-            r = rows[m]
-            row = {"month": m, "status": "actual" if m <= cut else "forecast",
+        for y, m in [(y, m) for y in years for m in range(1, 13)]:
+            r = rows[(y, m)]
+            row = {"year": y, "month": m,
+                   "status": "actual" if ym(y, m) <= cut else "forecast",
                    "Cn": num(ws, r, g["cols"]["Cn"])}
             if g["kind"] == "cogen":
                 row["Sn"] = num(ws, r, g["cols"]["Sn"])
@@ -163,7 +197,7 @@ def main():
                     d = round(row["price"] - row["Cn"] - row["Sn"], 2)
                     if abs(d) > 0.011:
                         row["epp_gap"] = d
-                        warnings.append(f"{g['name']} {MON[m-1]}: Selling price ไม่เท่ากับ "
+                        warnings.append(f"{g['name']} {MON[m-1]} {y}: Selling price ไม่เท่ากับ "
                                         f"Cn+Sn (ต่าง {d:+.2f}) — ช่อง 'ส่วนต่าง EPP' ไม่เป็น 0")
             else:
                 row["blocks"] = [{"label": b["label"], "Sn": num(ws, r, b["Sn"]),
@@ -172,7 +206,7 @@ def main():
             if any(v is None for v in ([row["Cn"], row.get("Sn"), row.get("price")]
                                        if g["kind"] == "cogen"
                                        else [row["Cn"]] + [b["price"] for b in row["blocks"]])):
-                warnings.append(f"{g['name']} {MON[m-1]}: มีช่องว่างในไฟล์ต้นทาง")
+                warnings.append(f"{g['name']} {MON[m-1]} {y}: มีช่องว่างในไฟล์ต้นทาง")
             rec["months"].append(row)
 
         out["groups"].append(rec)
@@ -188,12 +222,15 @@ def main():
     json.dump(out, open(args.out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
     print(f"ไฟล์ต้นทาง : {out['source_file']}")
-    print(f"ข้อมูล ณ   : {as_of.strftime('%d %b %Y')}   ปีที่ดึง: {year}")
+    span = f"{year}" if end_year == year else f"ม.ค. {year} – ธ.ค. {end_year}"
+    print(f"ข้อมูล ณ   : {as_of.strftime('%d %b %Y')}   ช่วงที่ดึง: {span}")
     print(f"เขียนไปที่ : {args.out}\n")
     for rec in out["groups"]:
-        n = sum(1 for x in rec["months"] if x["status"] == "actual")
-        edge = f"ราคาจริงถึง {MON[n-1]}" if n else "ยังไม่มีราคาจริง"
-        print(f"  {rec['name']:<22} {edge:<20} ประมาณการ {12-n} เดือน")
+        act = [x for x in rec["months"] if x["status"] == "actual"]
+        n = len(act)
+        edge = (f"ราคาจริงถึง {MON[act[-1]['month']-1]} {act[-1]['year']}"
+                if n else "ยังไม่มีราคาจริง")
+        print(f"  {rec['name']:<22} {edge:<24} ประมาณการ {len(rec['months'])-n} เดือน")
     if warnings:
         print("\n[เตือน]")
         for w in dict.fromkeys(warnings):

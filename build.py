@@ -71,6 +71,7 @@ def main():
     enc_groups = {gid: seal(gkeys[gid], by_id[gid]) for gid in used}
 
     meta = {k: data[k] for k in ("year", "as_of", "source_file", "unit")}
+    meta["end_year"] = data.get("end_year", data["year"])
 
     # ---- ห่อพวงกุญแจด้วยรหัสผ่าน (salt ร่วม -> ฝั่ง browser คำนวณ PBKDF2 ครั้งเดียว)
     salt = os.urandom(16)
@@ -90,7 +91,9 @@ def main():
                       "groups": enc_groups, "profiles": enc_profiles},
                      ensure_ascii=False)
 
-    title = args.title or f"ราคาก๊าซธรรมชาติ {data['year']}"
+    yr = (f"{data['year']}" if meta["end_year"] == data["year"]
+          else f"{data['year']}–{meta['end_year']}")
+    title = args.title or f"ราคาก๊าซธรรมชาติ {yr}"
     html = open(args.template, encoding="utf-8").read()
     html = html.replace("__ENC__", enc).replace("__TITLE__", title)
     open(args.out, "w", encoding="utf-8").write(html)

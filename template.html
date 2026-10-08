@@ -120,6 +120,7 @@ tbody tr:hover td{background:#F4F8F7}
 td.price{font-family:"IBM Plex Mono",monospace;font-weight:500;color:var(--ink)}
 td.sub{font-family:"IBM Plex Mono",monospace;color:var(--muted);font-size:12.5px}
 tr.seam td{border-bottom:2px dashed var(--proj)}
+tr.ybreak td{border-top:2px solid var(--line)}
 .tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.1em;
   padding:1px 5px;border:1px solid currentColor;vertical-align:1px;margin-left:7px;font-weight:400}
 .tag.a{color:var(--firm)} .tag.f{color:var(--proj)}
@@ -204,6 +205,8 @@ footer ul{margin:8px 0 0;padding-left:18px} footer li{margin:3px 0;overflow-wrap
 const ENC = __ENC__;
 const MON = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const BE2 = y => String(y+543).slice(2);
+const lab = d => MON[d.month-1] + " " + BE2(d.year);
 const fmt = n => n == null ? "–" : n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 
 /* ---------- unlock: รหัสผ่านปลดล็อกเฉพาะกลุ่มที่มีสิทธิ์ ---------- */
@@ -257,9 +260,13 @@ let D, gi = 0, bi = 0;
 function start(data){
   D = data;
   $("gate").remove(); $("app").classList.remove("hidden");
-  $("eyebrow").textContent = "ราคาขายก๊าซธรรมชาติ · ปี " + D.year
+  D.end_year = D.end_year || D.year;
+  // ไฟล์รุ่นเก่ามีปีเดียว ไม่มีฟิลด์ year ในแต่ละเดือน
+  D.groups.forEach(g => g.months.forEach(m => { if(m.year == null) m.year = D.year; }));
+  const yrs = D.end_year > D.year ? D.year + "–" + D.end_year : "" + D.year;
+  $("eyebrow").textContent = "ราคาขายก๊าซธรรมชาติ · ปี " + yrs
     + (D.profile ? " · " + D.profile : "");
-  $("title").textContent = "แนวโน้มราคาก๊าซ " + D.year;
+  $("title").textContent = "แนวโน้มราคาก๊าซ " + yrs;
   const d = new Date(D.as_of);
   const asofTxt = d.getDate() + " " + MON[d.getMonth()] + " " + (d.getFullYear()+543);
   $("asof").textContent = asofTxt;
@@ -282,7 +289,7 @@ function start(data){
 }
 
 const series = g => g.months.map(m => ({
-  month: m.month, status: m.status, Cn: m.Cn,
+  year: m.year, month: m.month, status: m.status, Cn: m.Cn,
   Sn:    g.kind === "cogen" ? m.Sn    : m.blocks[bi].Sn,
   price: g.kind === "cogen" ? m.price : m.blocks[bi].price
 }));
@@ -307,28 +314,32 @@ let rt; addEventListener("resize", () => { if(!D) return; clearTimeout(rt); rt =
 
 function drawStats(g){
   const s = series(g), P = s.map(x => x.price);
-  const avg = P.reduce((a,b) => a+b, 0) / P.length;
+  const mean = a => a.length ? a.reduce((x,y) => x+y, 0) / a.length : null;
+  const avgOf = y => mean(s.filter(x => x.year === y).map(x => x.price));
   const hi = s[P.indexOf(Math.max(...P))], lo = s[P.indexOf(Math.min(...P))];
   const last = [...s].reverse().find(x => x.status === "actual");
   const suffix = g.kind === "block" ? " · " + g.months[0].blocks[bi].label : "";
   $("stats").innerHTML = [
-    ["เฉลี่ยทั้งปี", fmt(avg), D.year + suffix],
-    ["ราคาจริงล่าสุด", last ? fmt(last.price) : "–", last ? MON[last.month-1] + " " + D.year : "—"],
-    ["สูงสุด", fmt(hi.price), MON[hi.month-1] + (hi.status === "forecast" ? " (ประมาณการ)" : "")],
-    ["ต่ำสุด", fmt(lo.price), MON[lo.month-1] + (lo.status === "forecast" ? " (ประมาณการ)" : "")]
+    ["เฉลี่ยปี " + D.year, fmt(avgOf(D.year)),
+      (D.end_year > D.year ? "ปี " + D.end_year + " เฉลี่ย " + fmt(avgOf(D.end_year)) : D.year) + suffix],
+    ["ราคาจริงล่าสุด", last ? fmt(last.price) : "–", last ? lab(last) : "—"],
+    ["สูงสุด", fmt(hi.price), lab(hi) + (hi.status === "forecast" ? " (ประมาณการ)" : "")],
+    ["ต่ำสุด", fmt(lo.price), lab(lo) + (lo.status === "forecast" ? " (ประมาณการ)" : "")]
   ].map(([k,v,sub]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`).join("");
 }
 
-/* ---------- chart: 12 เดือน + รอยต่อราคาจริง/ประมาณการ ---------- */
+/* ---------- chart: ทุกเดือนในช่วง (12–24 เดือน) + รอยต่อราคาจริง/ประมาณการ ---------- */
 function drawChart(g){
   const sm = innerWidth < 720;
-  const s = series(g), W = sm?420:760, H = sm?300:280, L = sm?42:56, R = sm?10:16, T = 18, B = sm?42:34;
+  const s = series(g), n = s.length, multi = D.end_year > D.year;
+  const W = sm?420:(n > 12 ? 1000 : 760), H = sm?300:(multi?300:280), L = sm?42:56, R = sm?10:16, T = 18,
+        B = (sm?42:34) + (multi?18:0);
   const FS = sm?12:10.5;
   const iw = W-L-R, ih = H-T-B;
   const vals = s.map(x => x.price);
   let min = Math.min(...vals), max = Math.max(...vals);
   const pad = (max-min || 10) * 0.18; min -= pad; max += pad;
-  const step = iw / 11;
+  const step = iw / (n-1);
   const X = i => L + i*step;
   const Y = v => T + ih - (v-min)/(max-min)*ih;
   const nA = s.filter(x => x.status === "actual").length;
@@ -348,13 +359,25 @@ function drawChart(g){
     out += `<polygon points="${area(0,nA)}" fill="var(--firm)" opacity=".08"/>`;
     out += `<polyline points="${seg(0,nA)}" fill="none" stroke="var(--firm)" stroke-width="2.2" stroke-linejoin="round"/>`;
   }
-  if(nA < 12){
+  if(nA < n){
     const a = Math.max(0, nA-1);
-    out += `<polygon points="${area(a,12)}" fill="var(--proj)" opacity=".08"/>`;
-    out += `<polyline points="${seg(a,12)}" fill="none" stroke="var(--proj)" stroke-width="2.2" stroke-dasharray="6 4" stroke-linejoin="round"/>`;
+    out += `<polygon points="${area(a,n)}" fill="var(--proj)" opacity=".08"/>`;
+    out += `<polyline points="${seg(a,n)}" fill="none" stroke="var(--proj)" stroke-width="2.2" stroke-dasharray="6 4" stroke-linejoin="round"/>`;
   }
   // รอยต่อ
-  if(nA > 0 && nA < 12){
+  // เส้นคั่นปี + ป้ายปี
+  if(multi){
+    s.forEach((d,i) => {
+      if(d.month !== 1) return;
+      if(i > 0){
+        const x = X(i) - step/2;
+        out += `<line x1="${x}" y1="${T}" x2="${x}" y2="${T+ih}" stroke="var(--line)" stroke-width="1"/>`;
+      }
+      out += `<text x="${X(i)}" y="${H-3}" text-anchor="start" font-size="${FS}" font-weight="600" fill="var(--ink)" font-family="IBM Plex Mono">${d.year}</text>`;
+    });
+  }
+  const every = sm ? (n > 12 ? 3 : 1) : 1;
+  if(nA > 0 && nA < n){
     const x = X(nA-1) + step/2;
     out += `<line x1="${x}" y1="${T-6}" x2="${x}" y2="${T+ih}" stroke="var(--proj)" stroke-width="1" stroke-dasharray="3 3"/>`
         +  `<text x="${x-6}" y="${T+4}" text-anchor="end" font-size="${sm?10:9.5}" letter-spacing="1.4" fill="var(--proj)" font-family="IBM Plex Mono">ประมาณการ →</text>`;
@@ -364,7 +387,7 @@ function drawChart(g){
     out += `<circle cx="${X(i)}" cy="${Y(d.price)}" r="3.4" fill="var(--card)" stroke="${c}" stroke-width="2"/>`
         +  `<rect x="${X(i)-step/2}" y="${T}" width="${step}" height="${ih}" fill="transparent"
              data-i="${i}" class="hit" style="cursor:crosshair"/>`;
-    out += `<text x="${X(i)}" y="${H-13}" text-anchor="middle" font-size="${FS}" fill="${d.status==="actual"?"var(--muted)":"var(--proj)"}" font-family="IBM Plex Mono" transform="${sm?`rotate(-45 ${X(i)} ${H-13})`:""}">${MON[d.month-1]}</text>`;
+    if(i % every === 0) out += `<text x="${X(i)}" y="${H-13-(multi?18:0)}" text-anchor="middle" font-size="${FS}" fill="${d.status==="actual"?"var(--muted)":"var(--proj)"}" font-family="IBM Plex Mono" transform="${sm?`rotate(-45 ${X(i)} ${H-13-(multi?18:0)})`:""}">${MON[d.month-1]}</text>`;
   });
   yl.forEach(t => out += t);
   $("chart").setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -374,7 +397,7 @@ function drawChart(g){
   $("chart").onmousemove = e => {
     const h = e.target.closest(".hit"); if(!h){ tip.style.opacity = 0; return; }
     const d = s[+h.dataset.i];
-    tip.innerHTML = `${MON[d.month-1]} ${D.year} · ${d.status==="actual"?"ราคาจริง":"ประมาณการ"}<br>`
+    tip.innerHTML = `${MON[d.month-1]} ${d.year} · ${d.status==="actual"?"ราคาจริง":"ประมาณการ"}<br>`
       + `Cn ${fmt(d.Cn)} + Sn ${fmt(d.Sn)}<br><b>${fmt(d.price)} ${D.unit}</b>`;
     tip.style.opacity = 1;
     tip.style.left = Math.min(e.clientX+14, innerWidth-190) + "px";
@@ -385,7 +408,7 @@ function drawChart(g){
 
 /* ---------- table ---------- */
 function drawTable(g){
-  const nA = g.months.filter(m => m.status === "actual").length;
+  const nA = g.months.filter(m => m.status === "actual").length, n = g.months.length;
   const sn = $("showsn").checked;
   let head, body;
 
@@ -403,11 +426,12 @@ function drawTable(g){
         (sn ? `<td class="sub">${fmt(b.Sn)}</td>` : ``) + `<td class="price">${fmt(b.price)}</td>`).join(""))).join("");
   }
   function row(m, i, cells){
-    const seam = (i === nA-1 && nA < 12) ? " seam" : "";
+    const seam = (i === nA-1 && nA < n) ? " seam" : "";
+    const yb = (m.month === 1 && i > 0) ? " ybreak" : "";
     const tag = m.status === "actual"
       ? `<span class="tag a">จริง</span>` : `<span class="tag f">ประมาณการ</span>`;
-    return `<tr class="${m.status === "forecast" ? "proj" : ""}${seam}">`
-      + `<td class="m">${MON[m.month-1]} ${String(D.year+543).slice(2)}${tag}</td>${cells}</tr>`;
+    return `<tr class="${m.status === "forecast" ? "proj" : ""}${seam}${yb}">`
+      + `<td class="m">${lab(m)}${tag}</td>${cells}</tr>`;
   }
   $("tbl").className = g.kind === "cogen" ? "cogen" : "";
   $("tbl").innerHTML = `<thead>${head}</thead><tbody>${body}</tbody>`;
